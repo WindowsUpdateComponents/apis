@@ -1,18 +1,8 @@
-// api/index.js
 const { parse } = require('url');
 
-// Armazenamento em memória das sessões ativas
-const sessions = new Map();
-
-// Limpeza automática de sessões antigas a cada 10 minutos
-setInterval(() => {
-    const now = Date.now();
-    for (const [state, sess] of sessions.entries()) {
-        if (now - sess.created_at > 10 * 60 * 1000) {
-            sessions.delete(state);
-        }
-    }
-}, 10 * 60 * 1000);
+// NOTA: Em produção Vercel, utilize Vercel KV (Redis) para persistência entre Lambdas.
+const sessions = global._sessions || new Map();
+if (process.env.NODE_ENV !== 'production') global._sessions = sessions;
 
 module.exports = async (req, res) => {
     const parsedUrl = parse(req.url, true);
@@ -25,8 +15,7 @@ module.exports = async (req, res) => {
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 
     if (method === 'OPTIONS') {
-        res.status(200).end();
-        return;
+        return res.status(200).end();
     }
 
     // Helper para ler body JSON
@@ -66,7 +55,7 @@ module.exports = async (req, res) => {
     }
 
     // ---------------------------------------------------------
-    // ROTA: Consultar Sessão
+    // ROTA: Consultar Sessão (Polling feito pelo main.js)
     // ---------------------------------------------------------
     if (action === 'session') {
         const state = query.state;
@@ -151,7 +140,7 @@ module.exports = async (req, res) => {
 
         if (!sess) {
             res.setHeader('Content-Type', 'text/html');
-            return res.status(400).send('<h2>Sessão inválida ou expirada. Volte ao Discord e tente novamente.</h2>');
+            return res.status(400).send('<h2 style="color: white; font-family: sans-serif; text-align: center; margin-top: 20%;">Sessão inválida ou expirada. Volte ao Discord e tente novamente.</h2>');
         }
 
         const html = `<!DOCTYPE html>
@@ -206,7 +195,7 @@ module.exports = async (req, res) => {
             document.getElementById('status').innerText = 'Validando no Discord...';
             document.getElementById('status').className = '';
 
-            fetch('/?action=submit', {
+            fetch('/api?action=submit', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ state: '${state}', token: token })
